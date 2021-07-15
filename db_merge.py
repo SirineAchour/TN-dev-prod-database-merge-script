@@ -1,12 +1,18 @@
 import os
 
 
-## requirements :
-## 2 database dumps
-## 2 text files : dev_queries.txt and prod_queries.txt
-## after running this script the source db must be cleaned up before running this script again
+# requirements :
+# 2 database SQL dumps
+# 2 text files : dev_queries.txt and prod_queries.txt
+# after running this script the source db must be cleaned up before running this script again
 
 def null_out_ids(query, auto_incremented_tables):
+    """
+    This for setting the primary key as NULL
+    :param query: "INSERT INTO" SQL query
+    :param auto_incremented_tables: list of tables that have an AUTO_INCREMENT PRIMARY KEY column
+    :return: (old primary key, table name, new query)
+    """
     final_q = "eh"
     val_id = query[query.index('(') + 1: query.index(',')]
     table = query.split()[2][1:].rstrip('`')
@@ -16,6 +22,11 @@ def null_out_ids(query, auto_incremented_tables):
 
 
 def get_singular_from_plural_table_name(name):
+    """
+    This is for getting a possible column name that references the table "name"
+    :param name: table name
+    :return: column name
+    """
     name = name.strip()
     if name.endswith('s'):
         return name[: len(name) - 1]
@@ -25,26 +36,28 @@ def get_singular_from_plural_table_name(name):
 
 
 def write_list_to_file(my_list, filename):
+    """
+    This is for writing a list to  file
+    :param my_list: list to write to file
+    :param filename: target file name
+    :return:
+    """
     with open(filename, 'w', encoding="utf-8") as f:
         for item in my_list:
             f.write("%s\n" % item)
 
 
-def compare_insert_statements(source, dest, filename):
+def get_merge_queries(source, dest, filename):
     """
     This function finds the updates that need to be done to the dest db from the source db.
-    By updates, we mean adding new data entries.
-    This function, then, prepares the new queries that update the dest db
+    By updates, we mean adding new data entries (INSERT INTO queries)
+    This function, then, prepares the new queries that update the dest db and writes them to file filename
     :param source: database sql dump file that we want to get updates from
     :param dest: database sql dump file that we want to update
-    :param filename: file that we want to save the new "insert into" queries into
+    :param filename: file that we want to save the new "INSERT INTO" queries into
     :return:
     """
     pwd = os.getcwd()
-    # directory = pwd[:len(pwd) - 7] + "db"
-    # source_file = directory + "\\" + source
-    # dest_file = directory + "\\" + dest
-
     source_file = source
     dest_file = dest
 
@@ -52,11 +65,16 @@ def compare_insert_statements(source, dest, filename):
     create_table_statements = {}  # table_name : [[col, type] ]
     auto_incremented_tables = []  # table names of tables having an auto incremented id
 
-    nulled_insert_queries = []  # [table_name, id] : table_name of table that we nulled the id for
+    nulled_insert_queries = []  # [table_name, id] : table_name => name of table that we set its the primary key to NULL
+    #                                                id => old primary key value
     all_insert_queries = []  # all insert into queries
-    normal_insert_queries = []  # insert into queries that dont require anythign
-
-    nulled_insert_queries_and_foreign_keys = {}  # {tablename : [id, id_pos, query_containing_id]}
+    normal_insert_queries = []  # insert into queries that are not affected by any foreign keys that we set NULL
+    #                             these queries can be ran without needing any ordering or checking
+    nulled_insert_queries_and_foreign_keys = {}  # {table_name : [id, id_pos, query_containing_id]}
+    #                                              table_name => name of table that we set its primary key to NULL
+    #                                              id => old primary key value
+    #                                              id_pos => position of foreign key
+    #                                              query_containing_id => INSERT INTO query containing the foreign key reference
 
     print('\033[91m' + "List of statements that exist in " + source + " but are missing from " + dest + '\033[0m')
     # first check big insert into statements
@@ -158,15 +176,15 @@ def compare_insert_statements(source, dest, filename):
                 singular_table_null = get_singular_from_plural_table_name(insert_query[0])
                 col_name_normal = \
                     create_table_statements[normal_insert_query_table_name][id_pos_in_normal_insert_query][0]
-                print(insert_query)
-                print(normal_insert_query)
-                print(col_name_normal)
-                print(singular_table_null)
-                print(create_table_statements[normal_insert_query_table_name])
+                # print(insert_query)
+                # print(normal_insert_query)
+                # print(col_name_normal)
+                # print(singular_table_null)
+                # print(create_table_statements[normal_insert_query_table_name])
                 if (singular_table_null == col_name_normal) or (col_name_normal in singular_table_null):
                     # print("First if ")
                     # check that both positions are equal (correct column)
-                    print("AAAAAA " + str(col_name_normal in singular_table_null))
+                    # print("AAAAAA " + str(col_name_normal in singular_table_null))
                     if (
                             (singular_table_null == col_name_normal)
                             and
@@ -180,7 +198,7 @@ def compare_insert_statements(source, dest, filename):
                                  normal_insert_query_table_name].index(
                                 [singular_table_null.split("_")[0], 'int']) == id_pos_in_normal_insert_query)
                     ):
-                        print("Second if ")
+                        # print("Second if ")
                         # foreign key detected
                         if normal_insert_query in normal_insert_queries:
                             normal_insert_queries.remove(normal_insert_query)
@@ -193,16 +211,16 @@ def compare_insert_statements(source, dest, filename):
                                                                                        id_pos_in_normal_insert_query,
                                                                                        normal_insert_query]
 
-    print("missing : " + str(missing))
-    print("create_table_statements : " + str(len(create_table_statements)))
-    print("auto_incremented_tables : " + str(len(auto_incremented_tables)))
-    print("nulled_insert_queries : " + str(len(nulled_insert_queries)))
-    print("nulled_insert_queries_and_foreign_keys : " + str(len(nulled_insert_queries_and_foreign_keys)))
+    # print("missing : " + str(missing))
+    # print("create_table_statements : " + str(len(create_table_statements)))
+    # print("auto_incremented_tables : " + str(len(auto_incremented_tables)))
+    # print("nulled_insert_queries : " + str(len(nulled_insert_queries)))
+    # print("nulled_insert_queries_and_foreign_keys : " + str(len(nulled_insert_queries_and_foreign_keys)))
     # print("final_insert_queries : " + str(len(final_insert_queries)))
-    print("all_insert_queries : " + str(len(all_insert_queries)))
-    print("normal_insert_queries : " + str(len(normal_insert_queries)))
-    for k in nulled_insert_queries_and_foreign_keys:
-        print(str(len(nulled_insert_queries_and_foreign_keys[k])))
+    # print("all_insert_queries : " + str(len(all_insert_queries)))
+    # print("normal_insert_queries : " + str(len(normal_insert_queries)))
+    # for k in nulled_insert_queries_and_foreign_keys:
+    #    print(str(len(nulled_insert_queries_and_foreign_keys[k])))
     # print('\033[91m' + "create_table_statements : " + '\033[0m')
     # print(create_table_statements)
     # print('\033[91m' + "auto_incremented_tables : " + '\033[0m')
@@ -225,11 +243,8 @@ def compare_insert_statements(source, dest, filename):
 
 
 # This saves all the missing insert into queries in a file
-# compare_insert_statements("tn_dev.sql", "tn_prod.sql", "dev_queries.txt")
-compare_insert_statements("tn_prod.sql", "tn_dev.sql", "prod_queries.txt")
-
-# And now, the issue with primary and foreign keys
-# Primary keys : auto_increquery.split()[2][1:].rstrip()ment ==> null out everything
+get_merge_queries("tn_dev.sql", "tn_prod.sql", "dev_queries.txt")
+#get_merge_queries("tn_prod.sql", "tn_dev.sql", "prod_queries.txt")
 
 # PLAN OF ACTION FOR PRIMARY KEYS :
 # get table name frm insert into statement
@@ -244,11 +259,11 @@ compare_insert_statements("tn_prod.sql", "tn_dev.sql", "prod_queries.txt")
 # loop list of nulled out ids
 # loop insert into statements file to look for said id
 # when found :
-# get e tablename li na3mlou fih fl insert heki
-# get l position mt3 l id fl values li are being inserted (number of ',' li 9balha)
-# go ll create statement mt3 e said table
+# get the tablename of that insert into query
+# get the position of the id in the insert into values
+# get the create statement of the new table
 # tablename is plural ==> make it singular ( people ==> person) ==> this is the column name
-# find the column position fl create table statement (line number)
+# find the column position in the create table statement (line number)
 # compare the 2 positions
-# ken != ==> do nothing
-# ken == nna7i l insert statement m e lista w n7ottou f dictionary m9ablou array n7ot fih the other insert statement
+# if != ==> do nothing
+# if == remove insert into statement from list and save it in the dictionary
